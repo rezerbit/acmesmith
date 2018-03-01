@@ -5,8 +5,15 @@ require 'acmesmith/save_certificate_service'
 
 module Acmesmith
   class Client
+    DEFAULT_AUTHORIZE_RETRY = {delay: 3, limit: 3}.freeze
+
+    class DomainsAreInvalid < StandardError; end
+
+    attr_reader :authorize_retry
+
     def initialize(config: nil)
       @config ||= config
+      @authorize_retry = config.fetch('authorize_retry', DEFAULT_AUTHORIZE_RETRY)
     end
 
     def register(contact)
@@ -40,6 +47,9 @@ module Acmesmith
           puts "=> Requesting verifications..."
           acme.request_verification(target[:challenge])
         end
+
+        retry_count = 0
+
           loop do
             all_valid = true
             targets.each do |target|
@@ -59,9 +69,13 @@ module Acmesmith
                 puts " ! [#{target[:domain]}] #{err["type"]}: #{err["detail"]}"
               end
             end
+
             break if all_valid
-            sleep 3
+            retry_count += 1
+            raise DomainsAreInvalid if retry_count == authorize_retry.fetch(:limit)
+            sleep authorize_retry.fetch(:delay)
           end
+
           puts "=> Done"
       ensure
         targets.each do |target|
