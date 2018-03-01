@@ -5,8 +5,14 @@ require 'acmesmith/save_certificate_service'
 
 module Acmesmith
   class Client
+    DEFAULT_AUTHORIZE_RETRY = {delay: 3, limit: 3}.freeze
+
+    attr_reader :authorize_retry
+
     def initialize(config: nil)
       @config ||= config
+      @authorize_retry = config['authorize_retry']
+      @authorize_retry ||= DEFAULT_AUTHORIZE_RETRY
     end
 
     def register(contact)
@@ -40,29 +46,36 @@ module Acmesmith
           puts "=> Requesting verifications..."
           acme.request_verification(target[:challenge])
         end
-          loop do
-            all_valid = true
-            targets.each do |target|
-              next if target[:valid]
 
-              status = acme.verify_status(target[:challenge])
-              puts " * [#{target[:domain]}] verify_status: #{status}"
+        retry_count = 0
+        loop do
+          retry_count < authorize_retry.fetch(:limit)
 
-              if status == 'valid'
-                target[:valid] = true
-                next
-              end
+          all_valid = true
+          targets.each do |target|
+            next if target[:valid]
 
-              all_valid = false
-              if status == "invalid"
-                err = target[:challenge].error
-                puts " ! [#{target[:domain]}] #{err["type"]}: #{err["detail"]}"
-              end
+            status = acme.verify_status(target[:challenge])
+            puts " * [#{target[:domain]}] verify_status: #{status}"
+
+            if status == 'valid'
+              target[:valid] = true
+              next
             end
-            break if all_valid
-            sleep 3
+
+            all_valid = false
+            if status == "invalid"
+              err = target[:challenge].error
+              puts " ! [#{target[:domain]}] #{err["type"]}: #{err["detail"]}"
+            end
           end
-          puts "=> Done"
+
+          break if all_valid
+          retry_count += 1
+          sleep authorize_retry.fetch(:delay)
+        end
+
+        puts "=> Done"
       ensure
         targets.each do |target|
           target[:responder].cleanup(target[:domain], target[:challenge])
