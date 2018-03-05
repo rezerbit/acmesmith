@@ -13,7 +13,7 @@ module Acmesmith
 
     def initialize(config: nil)
       @config ||= config
-      @authorize_retry = config.fetch('authorize_retry', DEFAULT_AUTHORIZE_RETRY)
+      @authorize_retry = config['authorize_retry'] || DEFAULT_AUTHORIZE_RETRY
     end
 
     def register(contact)
