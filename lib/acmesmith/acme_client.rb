@@ -43,6 +43,17 @@ module Acmesmith
       end
     end
 
+    def jwk_thumbprint
+      @acme.jwk.thumbprint
+    end
+
+    # @param [Acmesmith::Certificate] certificate
+    def revoke_certificate(certificate)
+      retry_once_on_bad_nonce do
+        @acme.revoke_certificate(certificate)
+      end
+    end
+
     private
 
     def retry_once_on_bad_nonce(&block)
